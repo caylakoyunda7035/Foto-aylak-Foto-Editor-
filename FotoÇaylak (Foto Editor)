@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>ÇaylakFoto</title>
+<meta name="theme-color" content="#1f2937"/>
+<style>
+  :root{ --bg:#0f1724; --card:#0b1220; --muted:#94a3b8; --accent:#06b6d4; --btn-h:44px; }
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;color:#e6eef6;background:linear-gradient(180deg,#071127 0%, #071829 100%);} 
+  .app {max-width:980px;margin:0 auto;padding:12px;box-sizing:border-box;}
+  header{display:flex;align-items:center;gap:12px}
+  h1{font-size:20px;margin:0;color:var(--accent)}
+  .topbar{display:flex;gap:8px;align-items:center;margin:12px 0;flex-wrap:wrap}
+  .card{background:rgba(255,255,255,0.03);padding:10px;border-radius:12px;box-shadow:0 4px 18px rgba(2,6,23,0.6);} 
+  #canvasWrap{display:flex;justify-content:center;align-items:center;padding:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);border-radius:10px;}
+  canvas{max-width:100%;border-radius:8px;touch-action:none; background:#ffffff;}
+  .controls{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  button, .filebtn {height:var(--btn-h);padding:0 12px;border-radius:8px;border:0;background:var(--accent);color:#031025;font-weight:600;cursor:pointer;}
+  button.secondary{background:transparent;color:var(--muted);border:1px solid rgba(255,255,255,0.04);font-weight:600}
+  .small{height:36px;padding:0 10px;font-size:14px}
+  .sliders{display:flex;flex-direction:column;gap:8px;padding:8px;border-radius:8px}
+  label{font-size:13px;color:var(--muted)}
+  input[type="range"]{width:100%}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;}
+  .filterbtn{height:36px;padding:0 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:var(--muted);cursor:pointer}
+  .filterbtn.active{background:rgba(6,182,212,0.12);color:var(--accent);border-color:rgba(6,182,212,0.18)}
+  .footer-note{color:var(--muted);font-size:13px;margin-top:8px}
+  @media (min-width:880px){ .layout{display:grid;grid-template-columns:1fr 320px;gap:12px;align-items:start} }
+  .overlay-hint{font-size:12px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" style="flex:0 0 36px">
+        <rect width="24" height="24" rx="6" fill="#052431"/>
+        <path d="M7 13c1.333-1.8 3.333-3 5-3s3.667 1.2 5 3v3H7v-3z" fill="#0ee6ff" opacity="0.9"/>
+      </svg>
+      <div>
+        <h1>ÇaylakFoto</h1>
+        <div style="font-size:12px;color:var(--muted)">Yapımcı: Çaylak Oyunda, Sürüm: 1.0.0</div>
+      </div>
+    </header>
+
+    <div class="topbar">
+      <label class="card filebtn" style="display:inline-flex;align-items:center;gap:8px">
+        <input id="file" type="file" accept="image/*" style="display:none">
+        <span>Foto Yükle</span>
+      </label>
+      <button id="undo" class="secondary small" disabled>Geri Al</button>
+      <button id="redo" class="secondary small" disabled>İleri</button>
+      <button id="rotateLeft" class="small">⟲ Döndür</button>
+      <button id="rotateRight" class="small">⟳ Döndür</button>
+      <button id="cropBtn" class="small">Kırp</button>
+      <button id="applyCropBtn" class="small secondary" disabled>Uygula</button>
+      <button id="cancelCropBtn" class="small secondary" disabled>İptal</button>
+      <button id="saveBtn" class="small" disabled>Kaydet</button>
+    </div>
+
+    <div class="layout">
+      <div class="card" style="padding:12px">
+        <div id="canvasWrap" style="min-height:260px">
+          <canvas id="canvas" width="900" height="600"></canvas>
+        </div>
+        <div class="overlay-hint">Kırpma için "Kırp" → seçim yap → "Uygula". Touch ile seçebilirsiniz.</div>
+      </div>
+
+      <div>
+        <div class="card controls" style="padding:12px">
+          <div>
+            <label style="display:block;margin-bottom:6px">Filtreler (10 adet)</label>
+            <div class="filters" id="filters"></div>
+          </div>
+
+          <div style="margin-top:8px">
+            <label>Parlaklık: <span id="bval">0</span></label>
+            <input id="brightness" type="range" min="-100" max="100" value="0">
+          </div>
+          <div>
+            <label>Kontrast: <span id="cval">0</span></label>
+            <input id="contrast" type="range" min="-100" max="100" value="0">
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="fitBtn" class="small secondary">Ekrana Sığdır</button>
+            <button id="actualBtn" class="small secondary">Gerçek Boyut</button>
+          </div>
+
+          <div class="footer-note">FotoÇaylak'tan memnun kaldınız mı? Play Storede puanlayın!</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+const fileEl = document.getElementById('file');
+const undoBtn = document.getElementById('undo');
+const redoBtn = document.getElementById('redo');
+const saveBtn = document.getElementById('saveBtn');
+const rotateLeftBtn = document.getElementById('rotateLeft');
+const rotateRightBtn = document.getElementById('rotateRight');
+const cropBtn = document.getElementById('cropBtn');
+const applyCropBtn = document.getElementById('applyCropBtn');
+const cancelCropBtn = document.getElementById('cancelCropBtn');
+const fitBtn = document.getElementById('fitBtn');
+const actualBtn = document.getElementById('actualBtn');
+const brightnessEl = document.getElementById('brightness');
+const contrastEl = document.getElementById('contrast');
+const bval = document.getElementById('bval');
+const cval = document.getElementById('cval');
+const filtersDiv = document.getElementById('filters');
+
+let img = new Image();
+let baseImageForSlider = null;
+
+// undo/redo
+const undoStack = []; const redoStack = []; const STACK_LIMIT = 20;
+function pushState(){ try{ undoStack.push(canvas.toDataURL('image/png')); if(undoStack.length>STACK_LIMIT) undoStack.shift(); redoStack.length=0; updateUndoRedoButtons(); }catch(e){console.warn(e);} }
+function undo(){ if(!undoStack.length) return; const last = undoStack.pop(); redoStack.push(canvas.toDataURL()); const image = new Image(); image.onload = ()=>{ canvas.width=image.width; canvas.height=image.height; ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(image,0,0); }; image.src = last; updateUndoRedoButtons(); }
+function redo(){ if(!redoStack.length) return; const last = redoStack.pop(); undoStack.push(canvas.toDataURL()); const image = new Image(); image.onload = ()=>{ canvas.width=image.width; canvas.height=image.height; ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(image,0,0); }; image.src = last; updateUndoRedoButtons(); }
+function updateUndoRedoButtons(){ undoBtn.disabled = undoStack.length===0; redoBtn.disabled = redoStack.length===0; }
+
+fileEl.addEventListener('change',(e)=>{ const f = e.target.files&&e.target.files[0]; if(!f) return; const url = URL.createObjectURL(f); loadImage(url,true); });
+function loadImage(src, resetStacks=true){ img = new Image(); img.onload = ()=>{ const maxW=1600, maxH=1600; let w=img.width,h=img.height; const r=Math.min(1, maxW/w, maxH/h); w=Math.round(w*r); h=Math.round(h*r); canvas.width=w; canvas.height=h; ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,w,h); ctx.drawImage(img,0,0,w,h); brightnessEl.value=0; contrastEl.value=0; bval.textContent='0'; cval.textContent='0'; document.querySelectorAll('.filterbtn').forEach(b=>b.classList.remove('active')); if(resetStacks){ undoStack.length=0; redoStack.length=0; updateUndoRedoButtons(); } saveBtn.disabled=false; }; img.src = src; }
+
+// FILTERS (10)
+const FILTERS = [
+  {id:'normal', label:'Normal', fn: d=>d},
+  {id:'sepia', label:'Sepia', fn: d=>applySepia(d)},
+  {id:'noir', label:'B&W', fn: d=>applyGrayscale(d)},
+  {id:'vivid', label:'Vivid', fn: d=>applyVivid(d)},
+  {id:'cool', label:'Cool', fn: d=>applyTint(d, -15, -5, 10)},
+  {id:'warm', label:'Warm', fn: d=>applyTint(d, 12, 4, -6)},
+  {id:'retro', label:'Retro', fn: d=>applyRetro(d)},
+  {id:'fade', label:'Fade', fn: d=>applyFade(d)},
+  {id:'lomo', label:'Lomo', fn: d=>applyLomo(d)},
+  {id:'cinema', label:'Cinema', fn: d=>applyCinematic(d)}
+];
+let activeFilter='normal';
+function createFilterButtons(){ FILTERS.forEach(f=>{ const b=document.createElement('button'); b.className='filterbtn'; b.textContent=f.label; b.dataset.id=f.id; b.onclick=()=>{ applyFilter(f.id); document.querySelectorAll('.filterbtn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); }; if(f.id==='normal') b.classList.add('active'); filtersDiv.appendChild(b); }); }
+createFilterButtons();
+
+function applyFilter(id){ if(!canvas.width) return; pushState(); activeFilter=id; const w=canvas.width,h=canvas.height; const imgd=ctx.getImageData(0,0,w,h); const fn=(FILTERS.find(x=>x.id===id)||FILTERS[0]).fn; const out=fn(imgd); ctx.putImageData(out,0,0); }
+
+// filter implementations
+function applyGrayscale(imageData){ const d=imageData.data; for(let i=0;i<d.length;i+=4){ const r=d[i],g=d[i+1],b=d[i+2]; const v=0.299*r+0.587*g+0.114*b; d[i]=d[i+1]=d[i+2]=v; } return imageData; }
+function applySepia(imageData){ const d=imageData.data; for(let i=0;i<d.length;i+=4){ const r=d[i],g=d[i+1],b=d[i+2]; d[i]=Math.min(255,0.393*r+0.769*g+0.189*b); d[i+1]=Math.min(255,0.349*r+0.686*g+0.168*b); d[i+2]=Math.min(255,0.272*r+0.534*g+0.131*b); } return imageData; }
+function applyVivid(imageData){ const d=imageData.data; for(let i=0;i<d.length;i+=4){ const r=d[i],g=d[i+1],b=d[i+2]; const lum=0.3*r+0.59*g+0.11*b; const boost=1.2; d[i]=Math.min(255,lum*(1-boost)+r*boost); d[i+1]=Math.min(255,lum*(1-boost)+g*boost); d[i+2]=Math.min(255,lum*(1-boost)+b*boost); } return imageData; }
+function applyTint(imageData, offR=0, offG=0, offB=0){ const d=imageData.data; for(let i=0;i<d.length;i+=4){ d[i]=Math.max(0,Math.min(255,d[i]+offR)); d[i+1]=Math.max(0,Math.min(255,d[i+1]+offG)); d[i+2]=Math.max(0,Math.min(255,d[i+2]+offB)); } return imageData; }
+function applyRetro(imageData){ const d=imageData.data; for(let i=0;i<d.length;i+=4){ d[i]=Math.min(255,d[i]*0.95 + 20); d[i+1]=Math.min(255,d[i+1]*0.9 + 8); d[i+2]=Math.min(255,d[i+2]*0.85 - 6); // slight shift
+ // subtle vignette by lowering corners later (skip per-pixel expensive)
+ } return imageData; }
+function applyFade(imageData){ const d=imageData.data; for(let i=0;i<d.length;i+=4){ d[i]=d[i]*0.9 + 20; d[i+1]=d[i+1]*0.9 + 18; d[i+2]=d[i+2]*0.9 + 16; } return imageData; }
+function applyLomo(imageData){ const w=imageData.width, h=imageData.height; const d=imageData.data; // saturation boost + vignette
+ for(let i=0;i<d.length;i+=4){ const r=d[i],g=d[i+1],b=d[i+2]; const lum=0.3*r+0.59*g+0.11*b; const sat=1.4; d[i]=Math.min(255, lum*(1-sat)+r*sat); d[i+1]=Math.min(255, lum*(1-sat)+g*sat); d[i+2]=Math.min(255, lum*(1-sat)+b*sat); }
+ // vignette
+ for(let y=0;y<h;y++){ for(let x=0;x<w;x++){ const dx = (x - w/2)/(w/2); const dy = (y - h/2)/(h/2); const dist = Math.sqrt(dx*dx + dy*dy); const v = 1 - Math.pow(dist, 2.2); const idx = (y*w + x)*4; d[idx]*=v; d[idx+1]*=v; d[idx+2]*=v; } }
+ return imageData; }
+function applyCinematic(imageData){ const d=imageData.data; for(let i=0;i<d.length;i+=4){ const r=d[i],g=d[i+1],b=d[i+2]; // teal-orange like split
+ d[i] = Math.min(255, r*0.95 + 10); d[i+1] = Math.min(255, g*0.9 + 6); d[i+2] = Math.min(255, b*0.95 + 0);
+ // subtle contrast
+ } return imageData; }
+
+// Brightness & Contrast
+let sliderActive=false; function applyBrightnessContrastTo(imageData, brightness=0, contrast=0){ const d=imageData.data; const b=parseInt(brightness,10); const c=parseInt(contrast,10); const factor=(259*(c+255))/(255*(259-c)); for(let i=0;i<d.length;i+=4){ for(let ch=0; ch<3; ch++){ let val=d[i+ch]; val = factor*(val-128)+128; val = val + b; d[i+ch]=Math.max(0,Math.min(255,val)); } } return imageData; }
+function sliderStart(){ if(!canvas.width) return; sliderActive=true; baseImageForSlider = ctx.getImageData(0,0,canvas.width,canvas.height); }
+function sliderMove(){ if(!sliderActive||!baseImageForSlider) return; const b=parseInt(brightnessEl.value,10); const c=parseInt(contrastEl.value,10); bval.textContent=b; cval.textContent=c; const copy = new ImageData(new Uint8ClampedArray(baseImageForSlider.data), baseImageForSlider.width, baseImageForSlider.height); const out = applyBrightnessContrastTo(copy,b,c); ctx.putImageData(out,0,0); }
+function sliderEnd(){ if(!sliderActive) return; sliderActive=false; pushState(); baseImageForSlider=null; }
+brightnessEl.addEventListener('pointerdown', sliderStart); contrastEl.addEventListener('pointerdown', sliderStart); brightnessEl.addEventListener('input', sliderMove); contrastEl.addEventListener('input', sliderMove); brightnessEl.addEventListener('pointerup', sliderEnd); contrastEl.addEventListener('pointerup', sliderEnd); brightnessEl.addEventListener('pointercancel', sliderEnd); contrastEl.addEventListener('pointercancel', sliderEnd);
+
+// Rotate
+function rotateCanvas(deg){ if(!canvas.width) return; pushState(); const rad = deg * Math.PI / 180; const tmp = document.createElement('canvas'); const tctx = tmp.getContext('2d'); tmp.width = canvas.width; tmp.height = canvas.height; tctx.drawImage(canvas,0,0); const newW = Math.round(Math.abs(Math.sin(rad))*tmp.height + Math.abs(Math.cos(rad))*tmp.width); const newH = Math.round(Math.abs(Math.sin(rad))*tmp.width + Math.abs(Math.cos(rad))*tmp.height); const outCanvas = document.createElement('canvas'); outCanvas.width=newW; outCanvas.height=newH; const octx = outCanvas.getContext('2d'); octx.translate(newW/2,newH/2); octx.rotate(rad); octx.drawImage(tmp, -tmp.width/2, -tmp.height/2); canvas.width=newW; canvas.height=newH; ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,newW,newH); ctx.drawImage(outCanvas,0,0); }
+rotateLeftBtn.addEventListener('click', ()=> rotateCanvas(-90)); rotateRightBtn.addEventListener('click', ()=> rotateCanvas(90));
+
+// Crop
+let cropMode=false, cropRect=null, pointerDown=false, startX=0, startY=0;
+cropBtn.addEventListener('click', ()=>{ if(!canvas.width) return; cropMode=true; cropRect=null; canvas.style.cursor='crosshair'; applyCropBtn.disabled=false; cancelCropBtn.disabled=false; cropBtn.disabled=true; });
+applyCropBtn.addEventListener('click', applyCrop); cancelCropBtn.addEventListener('click', cancelCrop);
+canvas.addEventListener('pointerdown',(e)=>{ if(!cropMode) return; pointerDown=true; const r=canvas.getBoundingClientRect(); startX=Math.round((e.clientX - r.left)*(canvas.width / r.width)); startY=Math.round((e.clientY - r.top)*(canvas.height / r.height)); cropRect={x:startX,y:startY,w:0,h:0}; });
+canvas.addEventListener('pointermove',(e)=>{ if(!cropMode||!pointerDown) return; const r=canvas.getBoundingClientRect(); const mx=Math.round((e.clientX - r.left)*(canvas.width / r.width)); const my=Math.round((e.clientY - r.top)*(canvas.height / r.height)); cropRect.x = Math.min(startX,mx); cropRect.y = Math.min(startY,my); cropRect.w = Math.abs(mx - startX); cropRect.h = Math.abs(my - startY); redrawWithOverlay(); });
+canvas.addEventListener('pointerup', ()=> pointerDown=false); canvas.addEventListener('pointercancel', ()=> pointerDown=false);
+function redrawWithOverlay(){ const tmp=new Image(); tmp.onload = ()=>{ ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(tmp,0,0); if(cropRect){ ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.95)'; ctx.lineWidth=Math.max(2,Math.round(canvas.width/200)); ctx.setLineDash([8,6]); ctx.strokeRect(cropRect.x+0.5,cropRect.y+0.5,cropRect.w,cropRect.h); ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.rect(0,0,canvas.width,canvas.height); ctx.rect(cropRect.x,cropRect.y,cropRect.w,cropRect.h); ctx.fill('evenodd'); ctx.restore(); } }; tmp.src = canvas.toDataURL(); }
+function applyCrop(){ if(!cropRect||cropRect.w===0||cropRect.h===0){ cancelCrop(); return; } pushState(); const tmp=document.createElement('canvas'); tmp.width=cropRect.w; tmp.height=cropRect.h; const tctx=tmp.getContext('2d'); tctx.drawImage(canvas,cropRect.x,cropRect.y,cropRect.w,cropRect.h,0,0,cropRect.w,cropRect.h); canvas.width=tmp.width; canvas.height=tmp.height; ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(tmp,0,0); exitCropMode(); }
+function cancelCrop(){ exitCropMode(); const tmp=new Image(); tmp.onload = ()=>{ ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(tmp,0,0); }; tmp.src = canvas.toDataURL(); }
+function exitCropMode(){ cropMode=false; cropRect=null; pointerDown=false; canvas.style.cursor='default'; applyCropBtn.disabled=true; cancelCropBtn.disabled=true; cropBtn.disabled=false; }
+
+// Save
+saveBtn.addEventListener('click', ()=>{ if(!canvas.width) return; canvas.toBlob((blob)=>{ const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'caylakfoto-' + Date.now() + '.png'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=> URL.revokeObjectURL(url),10000); }, 'image/png', 0.95); });
+
+// Fit / Actual
+fitBtn.addEventListener('click', ()=>{ canvas.style.width='100%'; canvas.style.height='auto'; }); actualBtn.addEventListener('click', ()=>{ canvas.style.width=''; canvas.style.height=''; });
+
+// Undo/Redo bindings
+undoBtn.addEventListener('click', undo); redoBtn.addEventListener('click', redo);
+
+// init placeholder
+(function init(){ ctx.fillStyle='#f6fbff'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#b3c6d9'; ctx.font='18px sans-serif'; ctx.fillText('ÇaylakFoto — Foto yükleyin',12,30); })();
+
+// slider labels
+brightnessEl.addEventListener('input', ()=> bval.textContent = brightnessEl.value);
+contrastEl.addEventListener('input', ()=> cval.textContent = contrastEl.value);
+
+// keyboard shortcuts
+window.addEventListener('keydown',(e)=>{ if(e.ctrlKey && e.key==='z'){ undo(); e.preventDefault(); } if(e.ctrlKey && (e.key==='y' || (e.shiftKey && e.key==='Z'))){ redo(); e.preventDefault(); } });
+
+// End of script
+</script>
+
+<!--
+  NOT: Bu dosya tek HTML dosyasıdır. Cordova/Capacitor veya PWA ile paketlenebilir.
+  Play Store için: gerekli izinler ve privacy policy uygulama içinde/konsole'da sağlanmalıdır.
+-->
+</body>
+</html>
